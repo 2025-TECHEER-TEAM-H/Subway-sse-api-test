@@ -1,0 +1,50 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery-worker:
+    build: .
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      RABBITMQ_VHOST: /
+      SUBWAY_API_KEY: ${SUBWAY_API_KEY}
+      STATION_NAME: ${STATION_NAME}
+      LINE_NUM: ${LINE_NUM}
+    volumes:
+      - ./logs:/app/logs
+    command: celery -A tasks worker --loglevel=info
+
+  celery-beat:
+    build: .
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      celery-worker:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      RABBITMQ_VHOST: /
+      SUBWAY_API_KEY: ${SUBWAY_API_KEY}
+      STATION_NAME: ${STATION_NAME}
+      LINE_NUM: ${LINE_NUM}
+    command: celery -A celery_config beat --loglevel=info
